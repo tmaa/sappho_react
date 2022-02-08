@@ -104,15 +104,30 @@ function App() {
   }
 
   function handleSubmit(e){
-    var data = {"id": id, "name": name, "age": age, "height": height, "email": email, "phone": phone}
-    
-    axios.post(`http://localhost:3001/api/users/register`, data)
-      .then(res => {
-        console.log(res)
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition((position) => {
+        var data = {
+          "id": id, 
+          "name": name, 
+          "age": age, 
+          "height": height, 
+          "email": email, 
+          "phone": phone, 
+          "coordinates": {longitude: position.coords.longitude, latitude: position.coords.latitude}}
+        
+        console.log(data)
+        
+        axios.post(`http://localhost:3001/api/users/register`, data)
+          .then(res => {
+            console.log(res)
+          })
+          .catch(err => {
+            console.log(err)
+          })
       })
-      .catch(err => {
-        console.log(err)
-      })
+    }else{
+      console.log("location not available")
+    }
 
     // setName("")
     // setAge("")
@@ -125,10 +140,25 @@ function App() {
 
   function getCurrentUserInfo(){
     const currentUser = auth.currentUser;
-    console.log(currentUser)
 
     currentUser.getIdToken(true).then(token => {
       axios.get(`http://localhost:3001/api/users/me`, {
+        headers: {
+          'authorization': `Bearer ${token}`
+        }
+      }).then((res) => {
+        console.log(res.data)
+      }).catch((err) => {
+        console.log(err)
+      })
+    })
+  }
+
+  function filterPotentialMatches(){
+    const currentUser = auth.currentUser;
+
+    currentUser.getIdToken(true).then(token => {
+      axios.get(`http://localhost:3001/api/search/filter/${id}`, {
         headers: {
           'authorization': `Bearer ${token}`
         }
@@ -149,7 +179,7 @@ function App() {
         {registerSuccess ? (
           <div>
             <form onSubmit={handleSubmit}>
-              <h1>success {id}</h1>
+              <h1>{id}</h1>
               <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder='name'></input>
               <input type="text" value={age} onChange={e => setAge(e.target.value)} placeholder='age'></input>
               <input type="text" value={height} onChange={e => setHeight(e.target.value)} placeholder='height'></input>
@@ -160,6 +190,7 @@ function App() {
               <div><button type="submit">complete registration</button></div>
             </form>
             <div><button onClick={() => getCurrentUserInfo()}>get current user info</button></div>
+            <div><button onClick={() => filterPotentialMatches()}>filter potential matches</button></div>
           </div>
           ) : (null)
         }
