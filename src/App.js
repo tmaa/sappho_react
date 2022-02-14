@@ -74,7 +74,7 @@ function App() {
     if(id){
       //delete from mongodb
       user.getIdToken(true).then(token => {
-        axios.delete(`http://localhost:3001/api/users/me/delete`, {
+        axios.delete(`http://localhost:3001/api/account/me/delete`, {
           headers: {
             'authorization': `Bearer ${token}`
           }
@@ -124,7 +124,7 @@ function App() {
         
         console.log(data)
         
-        axios.post(`http://localhost:3001/api/users/register`, data)
+        axios.post(`http://localhost:3001/api/account/register`, data)
           .then(res => {
             console.log(res)
           })
@@ -149,12 +149,12 @@ function App() {
     const currentUser = auth.currentUser;
 
     currentUser.getIdToken(true).then(token => {
-      axios.get(`http://localhost:3001/api/users/me`, {
+      axios.get(`http://localhost:3001/api/account/me`, {
         headers: {
           'authorization': `Bearer ${token}`
         }
       }).then((res) => {
-        setCurrentUserName(res.data.user.name)
+        setCurrentUserName(res.data.account.name)
         console.log(res.data)
       }).catch((err) => {
         console.log(err)
@@ -173,8 +173,8 @@ function App() {
           'authorization': `Bearer ${token}`
         }
       }).then((res) => {
-        console.log(res.data.users)
-        setPotentialMatches(res.data.users)
+        console.log(res.data.accounts)
+        setPotentialMatches(res.data.accounts)
         setFilterSuccess(true)
       }).catch((err) => {
         console.log(err)
@@ -188,7 +188,7 @@ function App() {
     return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
   }
 
-  function updatePreferences(){
+  function updatepreference(){
     const prefPayload = {
       minimum_age: minAge,
       maximum_age: maxAge,
@@ -198,7 +198,7 @@ function App() {
     const currentUser = auth.currentUser;
     console.log(prefPayload)
     currentUser.getIdToken(true).then(token => {
-      axios.put(`http://localhost:3001/api/users/me/preferences`, prefPayload, {
+      axios.put(`http://localhost:3001/api/account/me/preference`, prefPayload, {
         headers: {
           'authorization': `Bearer ${token}`
         }
@@ -210,15 +210,16 @@ function App() {
     })
   }
 
-  const likeClicked = (e) => {
+  function likeDislikeClicked(decision, target_id){
+    console.log(decision, target_id)
     const currentUser = auth.currentUser;
     const likePayload = {
-      user_id: currentUser.uid,
-      target_user_id: e.target.getAttribute("id"),
-      liked: true
+      account_id: currentUser.uid,
+      target_account_id: target_id,
+      liked: decision === "like" ? true : false
     }
     currentUser.getIdToken(true).then(token => {
-      axios.post(`http://localhost:3001/api/actions/like`, likePayload, {
+      axios.post(`http://localhost:3001/api/actions/like-dislike`, likePayload, {
         headers: {
           'authorization': `Bearer ${token}`
         }
@@ -229,17 +230,8 @@ function App() {
       })
     })
 
-    console.log(`my id: ${currentUser.uid} other user id: ${e.target.getAttribute("id")}`)
-    const id = e.target.getAttribute("id")
-    setPotentialMatches(potentialMatches.filter(item => item.id !== id))
-  }
-
-  const dislikeClicked = (e) => {
-    const currentUser = auth.currentUser;
-
-    console.log(`my id: ${currentUser.uid} other user id: ${e.target.getAttribute("id")}`)
-    const id = e.target.getAttribute("id")
-    setPotentialMatches(potentialMatches.filter(item => item.id !== id))
+    //console.log(`my id: ${currentUser.uid} other user id: ${target_id}`)
+    setPotentialMatches(potentialMatches.filter(item => item.id !== target_id))
   }
 
   return (
@@ -288,20 +280,21 @@ function App() {
                 <option value={'w'}>Women</option>
                 <option value={'e'}>Everyone</option>
               </select>
-              <button onClick={(() => updatePreferences())}>update preferences</button>
+              <button onClick={(() => updatepreference())}>update preference</button>
             </div>
             <div style={{paddingBottom: "30px"}}><button onClick={() => filterPotentialMatches()}>filter potential matches</button></div>
             {(filterSuccess && potentialMatches) ? (
               potentialMatches.map((potentialMatch, index) => {
                 return(
                   <div key={index}>
-                    <label>{potentialMatch.name} {potentialMatch.age} </label>
-                    <button id={potentialMatch.id} onClick={likeClicked}>like</button>
-                    <button id={potentialMatch.id} onClick={dislikeClicked}>dislike</button>
+                    <label>{potentialMatch.name} {potentialMatch.age} | {potentialMatch.id}</label>
+                    <button onClick={() => likeDislikeClicked("like", potentialMatch.id)}>like</button>
+                    <button onClick={() => likeDislikeClicked("dislike", potentialMatch.id)}>dislike</button>
                   </div>
                 )
               })
             ) : (null)}
+          <div><button>show my matches</button></div>
           </div>
           ) : (null)
         }
