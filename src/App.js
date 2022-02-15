@@ -4,10 +4,14 @@ import { signInAnonymously,
   signOut, 
   deleteUser, 
   signInWithPhoneNumber,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
   RecaptchaVerifier,
   setPersistence} from 'firebase/auth'
 import {auth} from "./firebase"
 import axios from 'axios';
+import io from 'socket.io-client'
+import {socket} from './socketConnection'
 
 
 function App() {
@@ -25,34 +29,29 @@ function App() {
   const [maxDistance, setMaxDistance] = useState(25)
   const [gender, setGender] = useState('w')
   const [showMe, setShowMe] = useState('w')
+  const [message, setMessage] = useState("")
+  const [showMessage, setShowMessage] = useState()
+  const [chat, setChat] = useState([])
+  const [password, setPassword] = useState()
 
-  const generateRecaptcha = () => {
-    window.recaptchaVerifier = new RecaptchaVerifier('recaptcha-container', {
-      'size': 'invisible',
-      'callback': (response) => {
-        
-      }
-    }, auth);
-  }
+  useEffect(() => {
+    socket.on('connection')
+  }, [])
 
-  const requestOTP = (e) => {
-    console.log("submit clicked")
-    e.preventDefault();
-    if(phone.length >= 2){
-      let phoneNumber = "+1" + phone
-      console.log(phoneNumber)
-      generateRecaptcha();
-      let appVerifier = window.recaptchaVerifier;
-      signInWithPhoneNumber(auth, phoneNumber, appVerifier)
-        .then(res => {
-          console.log(res)
-          window.confirmationResult = res
-        }).catch((err) => {
-          console.log(err)
-        })
-    }
-  }
+  useEffect(() => {
+    socket.on('message', data => {
+      setChat(chat => [...chat, data])
+     })
+   }, [])
 
+  // useEffect(() => {
+  //   socket.on('output-message', data => {
+  //     for(var i = 0; i < data.length; i++){
+  //       setChat(chat => [...chat, data[i].message])
+  //     }
+  //   })
+  // }, [])
+  
   function onAnonClick(){
     signInAnonymously(auth)
       .then((res) => {
@@ -102,6 +101,7 @@ function App() {
     const user = auth.currentUser;
     signOut(auth).then(() => {
       setRegisterSuccess(false)
+      socket.disconnect()
       console.log("logged out: ", user)
     }).catch((error) => {
       console.log("err: ", error)
@@ -121,9 +121,8 @@ function App() {
           "gender": gender,
           "interested_in": showMe
         }
-        
         console.log(data)
-        
+
         axios.post(`http://localhost:3001/api/account/register`, data)
           .then(res => {
             console.log(res)
@@ -149,11 +148,13 @@ function App() {
     const currentUser = auth.currentUser;
 
     currentUser.getIdToken(true).then(token => {
-      axios.get(`http://localhost:3001/api/account/me`, {
+      axios.get(`http://192.168.86.123:3001/api/account/me`, {
         headers: {
           'authorization': `Bearer ${token}`
         }
       }).then((res) => {
+        socket.emit("login", res.data.account.id)
+        setId(res.data.account.id)
         setCurrentUserName(res.data.account.name)
         console.log(res.data)
       }).catch((err) => {
@@ -180,12 +181,6 @@ function App() {
         console.log(err)
       })
     })
-  }
-
-  function getAge(dob){
-    const today = new Date();
-    var diff = today.getTime() - new Date(dob).getTime();
-    return Math.floor(diff / (1000 * 60 * 60 * 24 * 365.25));
   }
 
   function updatepreference(){
@@ -234,14 +229,61 @@ function App() {
     setPotentialMatches(potentialMatches.filter(item => item.id !== target_id))
   }
 
+  function sendMessage(to_userId){
+    const messageData = {
+      from: auth.currentUser.uid,
+      to: to_userId,
+      message: message
+    }
+
+    socket.emit("send-message", messageData)
+    setChat(chat => [...chat, message])
+  }
+
+  function emailPasswordRegister(){
+    createUserWithEmailAndPassword(auth, email, password)
+      .then((res) => {
+        setId(res.user.uid)
+        setRegisterSuccess(true)
+        console.log(res)
+      })
+      .catch((error) => {
+        console.log(error)
+      });
+  }
+
+  function emailPasswordLogin(){
+    signInWithEmailAndPassword(auth, email, password)
+      .then((res) => {
+        setId(res.user.uid)
+        setRegisterSuccess(true)
+        console.log(res)
+      })
+      .catch((error) => {
+        console.log(error)
+      });
+  }
+
   return (
     <div className="App">
       <header className="App-header">
-        <button onClick={() => onAnonClick()}>anonymous sign in</button>
-        <button onClick={() => logoutAndDelete()}>log out & delete</button>
+      {chat.map((msg, index) => {
+          return(
+            <div key={index}>
+              <p>{msg}</p>
+            </div>
+          )
+        })}
+        {/* <button onClick={() => onAnonClick()}>anonymous sign in</button> */}
+        <div>
+          <input placeholder='email' onChange={e => setEmail(e.target.value)}></input>
+          <input placeholder='password' onChange={e => setPassword(e.target.value)}></input>
+          <button onClick={() => emailPasswordLogin()}>log in</button>
+          <button onClick={() => emailPasswordRegister()}>register</button>
+        </div>
+        {/* <button onClick={() => logoutAndDelete()}>log out & delete</button> */}
         <button onClick={() => logoutWithoutDelete()}>log out</button>
 
-        {registerSuccess ? (
           <div>
             <form onSubmit={handleSubmit}>
               <h2>{currentUserName}</h2>
@@ -288,6 +330,10 @@ function App() {
                 return(
                   <div key={index}>
                     <label>{potentialMatch.name} {potentialMatch.age} | {potentialMatch.id}</label>
+                    <div>
+                      <input type='text' className="message" onChange={(e) => setMessage(e.target.value)}></input>
+                      <button onClick={() => sendMessage(potentialMatch.id)}>Send message</button>
+                    </div>
                     <button onClick={() => likeDislikeClicked("like", potentialMatch.id)}>like</button>
                     <button onClick={() => likeDislikeClicked("dislike", potentialMatch.id)}>dislike</button>
                   </div>
@@ -296,8 +342,6 @@ function App() {
             ) : (null)}
           <div><button>show my matches</button></div>
           </div>
-          ) : (null)
-        }
       </header>
     </div>
   );
